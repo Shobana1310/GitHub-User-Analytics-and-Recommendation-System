@@ -3,10 +3,8 @@ import pymongo
 import re
 import github3
 import time
-import os
 import joblib
 import io
-import gridfs
 import nltk
 import requests
 import json
@@ -16,23 +14,17 @@ from bs4 import BeautifulSoup
 from io import BytesIO
 import pandas as pd
 import datetime
-import numpy as np
-from dotenv import load_dotenv
 from pathlib import Path
 import streamlit as st
 import hydralit_components as hc
 from sklearn.feature_extraction.text import TfidfVectorizer
 from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
-from bs4 import BeautifulSoup
 from nltk.corpus import stopwords
 from collections import Counter
-from sklearn.feature_extraction.text import TfidfVectorizer
 from scipy.sparse import hstack
 from scipy.sparse import vstack
 from sklearn.metrics.pairwise import cosine_similarity
-from dotenv import load_dotenv
-from dateutil import parser
 from github3 import GitHub
 from dropbox.oauth import DropboxOAuth2Flow
 import plotly.express as px
@@ -41,7 +33,7 @@ import spacy
 import en_core_web_sm
 nlp = en_core_web_sm.load()
 
-load_dotenv()
+
 api_key =st.secrets["github_api_key_6"]
 headers = {"Authorization": f"token {api_key}"}
 
