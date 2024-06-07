@@ -26,6 +26,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 from dropbox.oauth import DropboxOAuth2Flow
 import plotly.express as px
 from streamlit_extras.mention import mention
+nltk.download('punkt')
+nltk.download('wordnet')
+nltk.download('stopwords')
+nltk.download('averaged_perceptron_tagger')
 import spacy
 import en_core_web_sm
 nlp = en_core_web_sm.load()
