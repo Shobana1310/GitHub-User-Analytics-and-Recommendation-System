@@ -683,6 +683,23 @@ if menu_id =='ANALYSIS':
             return readme_df
         readme_df=get_readme_df()
 
+        repo_df['pushed_at']=pd.to_datetime(repo_df['pushed_at'])
+        repo_df['repo_created_at']=pd.to_datetime(repo_df['repo_created_at'])
+        repo_df['updated_at']=pd.to_datetime(repo_df['updated_at'])
+        result = pd.merge(repo_df, readme_df, on=['login','repos_name','repo_url'], how='inner')
+        new_user_df=result[['login','repos_name','repo_url','languages_list','repos_description','readme']]
+        new_user_df['primary_language'] = new_user_df['languages_list'].apply(lambda x: x.split(' ')[0])
+        new_user_df['repos_description'] = new_user_df.apply(generate_description_from_readme, axis=1)
+        new_user_df= new_user_df.drop_duplicates(subset=['repo_url'])
+
+        
+        def prepare_the_data():
+            new_user_df['repos_name'] = preprocess_data(new_user_df['repos_name'])
+            new_user_df['repos_description'] = preprocess_data(new_user_df['repos_description'])
+            new_user_df['readme'] = preprocess_data(new_user_df['readme'])
+            new_user_df['languages_list']=preprocess_data(new_user_df['languages_list'])
+        prepare_the_data()
+
     
         st.write(' ')
         st.write(' ')
@@ -845,22 +862,7 @@ if menu_id =='ANALYSIS':
                 st.plotly_chart(fig, use_container_width=True)
         forkscount_chart()
 
-        repo_df['pushed_at']=pd.to_datetime(repo_df['pushed_at'])
-        repo_df['repo_created_at']=pd.to_datetime(repo_df['repo_created_at'])
-        repo_df['updated_at']=pd.to_datetime(repo_df['updated_at'])
-        result = pd.merge(repo_df, readme_df, on=['login','repos_name','repo_url'], how='inner')
-        new_user_df=result[['login','repos_name','repo_url','languages_list','repos_description','readme']]
-        new_user_df['primary_language'] = new_user_df['languages_list'].apply(lambda x: x.split(' ')[0])
-        new_user_df['repos_description'] = new_user_df.apply(generate_description_from_readme, axis=1)
-        new_user_df= new_user_df.drop_duplicates(subset=['repo_url'])
-
-        
-        def prepare_the_data():
-            new_user_df['repos_name'] = preprocess_data(new_user_df['repos_name'])
-            new_user_df['repos_description'] = preprocess_data(new_user_df['repos_description'])
-            new_user_df['readme'] = preprocess_data(new_user_df['readme'])
-            new_user_df['languages_list']=preprocess_data(new_user_df['languages_list'])
-        prepare_the_data()
+       
 
         st.subheader(':red[**Mandatory ⚠️  Add Your Data In The Recommendation System,Dont Go Recommendation Without Click Here**]')
         if st.button("Click Here", type="primary"):
@@ -1102,50 +1104,3 @@ if menu_id=='RECOMMENDATION':
 
                 st.components.v1.html(html_code, height=240)
                 st.markdown("<br><br>", unsafe_allow_html=True)
-
-      
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
