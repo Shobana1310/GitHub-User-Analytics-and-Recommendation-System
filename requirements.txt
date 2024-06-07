@@ -1,5 +1,4 @@
 pymongo==4.7.3
-github3==3.13
 regex==2024.5.15
 joblib==1.4.2
 nltk==3.8.1
