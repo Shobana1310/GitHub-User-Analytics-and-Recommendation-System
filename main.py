@@ -1,3 +1,4 @@
+
 import pymongo
 import re
 import time
@@ -26,14 +27,23 @@ from sklearn.metrics.pairwise import cosine_similarity
 from dropbox.oauth import DropboxOAuth2Flow
 import plotly.express as px
 from streamlit_extras.mention import mention
-nltk.download('punkt')
-nltk.download('wordnet')
-nltk.download('stopwords')
-nltk.download('averaged_perceptron_tagger')
+from nltk.data import find
 import spacy
 import en_core_web_sm
 nlp = en_core_web_sm.load()
 
+def download_nltk_data():
+    packages = ['punkt', 'wordnet', 'stopwords', 'averaged_perceptron_tagger']
+    for package in packages:
+        try:
+            if package == 'punkt':
+                find('tokenizers/punkt')
+            else:
+                find(package)
+        except LookupError:
+            nltk.download(package, quiet=True)
+
+download_nltk_data()
 
 api_key =st.secrets["github_api_key_6"]
 headers = {"Authorization": f"token {api_key}"}
@@ -1105,3 +1115,5 @@ if menu_id=='RECOMMENDATION':
 
                 st.components.v1.html(html_code, height=240)
                 st.markdown("<br><br>", unsafe_allow_html=True)
+
+      
