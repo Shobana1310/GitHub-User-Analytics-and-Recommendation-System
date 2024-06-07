@@ -13,4 +13,4 @@ scipy==1.13.1
 plotly==5.22.0
 streamlit-extras==0.4.3
 spacy==3.7.5
-en_core_web_sm==3.7.1
+
