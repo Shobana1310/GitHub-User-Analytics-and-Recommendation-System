@@ -1,7 +1,5 @@
-
 import pymongo
 import re
-import github3
 import time
 import joblib
 import io
@@ -25,7 +23,6 @@ from collections import Counter
 from scipy.sparse import hstack
 from scipy.sparse import vstack
 from sklearn.metrics.pairwise import cosine_similarity
-from github3 import GitHub
 from dropbox.oauth import DropboxOAuth2Flow
 import plotly.express as px
 from streamlit_extras.mention import mention
