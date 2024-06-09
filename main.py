@@ -397,7 +397,7 @@ def get_df_from_dropbox():
     DROPBOX_REFRESH_TOKEN = st.secrets["DROPBOX_REFRESH_TOKEN"]
     DROPBOX_CLIENT_ID = st.secrets["DROPBOX_CLIENT_ID"]
     DROPBOX_CLIENT_SECRET =st.secrets["DROPBOX_CLIENT_SECRET"]
-    DROPBOX_FILE_PATH = '/df.joblib
+    DROPBOX_FILE_PATH = '/df.joblib'
 
     try:
         access_token = get_new_access_token(DROPBOX_REFRESH_TOKEN, DROPBOX_CLIENT_ID, DROPBOX_CLIENT_SECRET)
