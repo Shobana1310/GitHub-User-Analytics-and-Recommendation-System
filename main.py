@@ -394,26 +394,11 @@ def preprocess_data(df_column):
     return df_column
 
 def get_df_from_dropbox():
-    DROPBOX_REFRESH_TOKEN = os.getenv("DROPBOX_REFRESH_TOKEN")
-    DROPBOX_CLIENT_ID = os.getenv("DROPBOX_CLIENT_ID")
-    DROPBOX_CLIENT_SECRET = os.getenv("DROPBOX_CLIENT_SECRET")
-    DROPBOX_FILE_PATH = '/df.joblib'
-
-    try:
-        access_token = get_new_access_token(DROPBOX_REFRESH_TOKEN, DROPBOX_CLIENT_ID, DROPBOX_CLIENT_SECRET)
-        dbx = dropbox.Dropbox(access_token, app_secret=os.getenv("APP_SECRET"), user_agent="Github Recommendation System")
-    except Exception as e:
-        print(f"Error connecting to Dropbox: {e}")
-        return "Error connecting to Dropbox"
-
-    try:
-        _, res = dbx.files_download(DROPBOX_FILE_PATH)
-        file_data = res.content
-    except Exception as e:
-        print(f"Error downloading file from Dropbox: {e}")
-        return "Error downloading file from Dropbox"
-
-    df = joblib.load(BytesIO(file_data))
+    dropbox_url =os.getenv("DROPBOX_URL")
+    response = requests.get(dropbox_url)
+    response.raise_for_status()
+    file_data = BytesIO(response.content)
+    df = joblib.load(file_data)
     return df
 
 
