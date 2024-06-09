@@ -394,7 +394,7 @@ def preprocess_data(df_column):
     return df_column
 
 def get_df_from_dropbox():
-    dropbox_url =os.getenv("DROPBOX_URL")
+    dropbox_url =st.secrets("DROPBOX_URL")
     response = requests.get(dropbox_url)
     response.raise_for_status()
     file_data = BytesIO(response.content)
