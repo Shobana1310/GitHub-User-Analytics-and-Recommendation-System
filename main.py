@@ -958,6 +958,7 @@ if menu_id=='RECOMMENDATION':
       st.write(' ')
 
     df=get_df_from_dropbox()
+    st.dataframe(df.head())
 
     github_urls = [
     'https://github.com/Shobana1310/GitHub-User-Analytics-and-Recommendation-System/raw/main/vectorizer/name_vectorizer.joblib',
