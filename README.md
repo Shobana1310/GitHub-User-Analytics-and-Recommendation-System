@@ -6,7 +6,6 @@ Recommendation System**
 
 The GitHub Recommendation System is designed to suggest repositories to users based on their interests and activity on GitHub. This system utilizes content-based filtering techniques to generate recommendations.
 
-[**Click Here To See The App**](https://recommendation-system-xu59.streamlit.app/)
 
 
 
