@@ -18,4 +18,4 @@ SQLAlchemy==2.0.31
 pyodbc==5.1.0
 urllib3==2.2.2
 pymssql==2.3.0
-joblib 1.4.2
+joblib==1.4.2
