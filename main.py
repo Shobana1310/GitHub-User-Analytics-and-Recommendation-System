@@ -8,11 +8,12 @@ import nltk
 import requests
 import json
 import time
-import dropbox
 from bs4 import BeautifulSoup
 from io import BytesIO
 import pandas as pd
 import datetime
+import os
+from dotenv import load_dotenv
 from pathlib import Path
 import streamlit as st
 import hydralit_components as hc
@@ -24,11 +25,15 @@ from collections import Counter
 from scipy.sparse import hstack
 from scipy.sparse import vstack
 from sklearn.metrics.pairwise import cosine_similarity
-from dropbox.oauth import DropboxOAuth2Flow
 import plotly.express as px
 from streamlit_extras.mention import mention
+from sqlalchemy import create_engine
+from sqlalchemy import text
 from nltk.data import find
 import spacy
+import urllib.parse
+import joblib
+import pyodbc
 import en_core_web_sm
 nlp = en_core_web_sm.load()
 
@@ -49,11 +54,35 @@ api_key =st.secrets["github_api_key_6"]
 headers = {"Authorization": f"token {api_key}"}
 
 
-mongo_atlas_user_name = st.secrets["MONGO_ATLAS_USER_NAME"] 
-mongo_atlas_password =  st.secrets["MONGO_ATLAS_PASSWORD"] 
+mongo_atlas_user_name =st.secrets["MONGO_ATLAS_USER_NAME"]
+mongo_atlas_password = st.secrets["MONGO_ATLAS_PASSWORD"]
 client=pymongo.MongoClient(f"mongodb+srv://{mongo_atlas_user_name}:{mongo_atlas_password}@cluster0.ehfepgy.mongodb.net/?retryWrites=true&w=majority")
 db = client["github"]
 collection=db["github_user_details"] 
+
+server = st.secrets["SERVER"]
+database = st.secrets["DATABASE"]
+username = st.secrets["USERNAME"]
+password = st.secrets["AZURE_PASSWORD"]
+driver = 'ODBC Driver 17 for SQL Server'
+
+params = urllib.parse.quote_plus(f"""
+Driver={driver};
+Server=tcp:{server},1433;
+Database={database};
+Uid={username};
+Pwd={password};
+Encrypt=yes;
+TrustServerCertificate=no;
+Connection Timeout=30;
+""")
+
+conn_str = f'mssql+pyodbc:///?autocommit=true&odbc_connect={params}'
+
+engine = create_engine(conn_str, echo=True)
+
+# mysql_password = st.secrets["MYSQL_PASSWORD"] 
+# engine=create_engine(f"mysql+pymysql://root:{mysql_password}@localhost:3306/github")
 
 def get_user_details(user_name):
     user_url = f'https://api.github.com/users/{user_name}'
@@ -270,89 +299,66 @@ def update_user_data(user_name):
         print(f"Failed to process user {user_name}. Error: {e}")
 
 
-def get_new_access_token(refresh_token, client_id, client_secret):
-    url = "https://api.dropbox.com/oauth2/token"
-    data = {
-        "grant_type": "refresh_token",
-        "refresh_token": refresh_token,
-        "client_id": client_id,
-        "client_secret": client_secret
-    }
-    response = requests.post(url, data=data)
-    if response.status_code == 200:
-        return response.json()['access_token']
-    else:
-        raise Exception(f"Error refreshing access token: {response.text}")
-
-def new_data_updation():
-    DROPBOX_REFRESH_TOKEN = st.secrets["DROPBOX_REFRESH_TOKEN"]
-    DROPBOX_CLIENT_ID =st.secrets["DROPBOX_CLIENT_ID"]
-    DROPBOX_CLIENT_SECRET = st.secrets["DROPBOX_CLIENT_SECRET"]
-    DROPBOX_FILE_PATH = '/df.joblib'
-
+def create_and_insert_data(engine, table_name, create_table_query,file_path):
     try:
-        access_token = get_new_access_token(DROPBOX_REFRESH_TOKEN, DROPBOX_CLIENT_ID, DROPBOX_CLIENT_SECRET)
-        dbx = dropbox.Dropbox(access_token, app_secret=st.secrets["APP_SECRET"], user_agent="Github Recommendation System")
-    except Exception as e:
-        print(f"Error connecting to Dropbox: {e}")
-        return "Error connecting to Dropbox"
+        create_table_query = text("""
+                              CREATE TABLE IF NOT EXISTS repositories (
+                                   login VARCHAR(255),
+                                   repos_name VARCHAR(255),
+                                   repo_url varchar(255) PRIMARY KEY,
+                                   languages_list TEXT,
+                                   repos_description TEXT,
+                                   readme MEDIUMTEXT,
+                                   primary_language VARCHAR(255))""")
+        with engine.connect() as conn:
+            conn.execute(create_table_query)
 
+        df = joblib.load(file_path)
+
+        df.to_sql(table_name, con=engine, if_exists='append', index=False)
+
+        print(f"Data inserted into '{table_name}' successfully!")
+
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+
+file_path = 'https://github.com/Shobana1310/GitHub-User-Analytics-and-Recommendation-System/raw/main/vectorizer/df.joblib'
+
+create_and_insert_data(engine, 'repositories', file_path)
+
+def new_data_updation(new_user_df):
     try:
-        _, res = dbx.files_download(DROPBOX_FILE_PATH)
-        file_data = res.content
-    except Exception as e:
-        print(f"Error downloading file from Dropbox: {e}")
-        return "Error downloading file from Dropbox"
+     query = text('select * from repositories')
+     df = pd.read_sql_query(query, engine)
+     
+     updated_data = pd.concat([df, new_user_df], axis=0).reset_index(drop=True)
 
+     delete_query = text('TRUNCATE TABLE repositories')
+     with engine.connect() as conn:
+          conn.execute(delete_query)
+
+     updated_data.to_sql('repositories', con=engine, if_exists='append', index=False)
+
+     print("Data updated successfully!")
+        
+    except Exception as e:
+        print(f"Error occurred: {str(e)}")
+
+
+def exist_data_updation(user_name, new_user_df):
     try:
-        df = joblib.load(BytesIO(file_data))
-        updated_data = pd.concat([df, new_user_df], axis=0).reset_index(drop=True)
-
-        buffer = BytesIO()
-        joblib.dump(updated_data, buffer)
-        buffer.seek(0)
-        dbx.files_upload(buffer.read(), DROPBOX_FILE_PATH, mode=dropbox.files.WriteMode('overwrite'))
+        delete_query = text('DELETE FROM repositories WHERE login = :user_name')
+        
+        with engine.connect() as conn:
+            conn.execute(delete_query, {'user_name': user_name})
+            conn.commit()  
+            
+            new_user_df.to_sql('repositories', con=conn, if_exists='append', index=False)
+            
+            print("Data updated successfully!")
+        
     except Exception as e:
-        print(f"Error processing or uploading file to Dropbox: {e}")
-        return "Error processing or uploading file to Dropbox"
-
-    return "File updated and uploaded successfully"
-
-
-def exist_data_updation():
-    DROPBOX_REFRESH_TOKEN = st.secrets["DROPBOX_REFRESH_TOKEN"]
-    DROPBOX_CLIENT_ID = st.secrets["DROPBOX_CLIENT_ID"]
-    DROPBOX_CLIENT_SECRET =st.secrets["DROPBOX_CLIENT_SECRET"]
-    DROPBOX_FILE_PATH = '/df.joblib'
-
-    try:
-        access_token = get_new_access_token(DROPBOX_REFRESH_TOKEN, DROPBOX_CLIENT_ID, DROPBOX_CLIENT_SECRET)
-        dbx = dropbox.Dropbox(access_token, app_secret=st.secrets["APP_SECRET"], user_agent="Github Recommendation System")
-    except Exception as e:
-        print(f"Error connecting to Dropbox: {e}")
-        return "Error connecting to Dropbox"
-
-    try:
-        _, res = dbx.files_download(DROPBOX_FILE_PATH)
-        file_data = res.content
-    except Exception as e:
-        print(f"Error downloading file from Dropbox: {e}")
-        return "Error downloading file from Dropbox"
-
-    try:
-        df = joblib.load(BytesIO(file_data))
-        df =df.drop_duplicates(subset='repo_url')
-        df.drop(df[df['login'] == 'Shobana1310'].index, inplace=True)
-        updated_data = pd.concat([df, new_user_df], axis=0).drop_duplicates(subset='repo_url').reset_index(drop=True)
-        buffer = BytesIO()
-        joblib.dump(updated_data, buffer)
-        buffer.seek(0)
-        dbx.files_upload(buffer.read(), DROPBOX_FILE_PATH, mode=dropbox.files.WriteMode('overwrite'))
-    except Exception as e:
-        print(f"Error processing or uploading file to Dropbox: {e}")
-        return "Error processing or uploading file to Dropbox"
-
-    return "File updated and uploaded successfully"
+        print(f"Error occurred: {str(e)}")
 
 def generate_description_from_readme(row):
     if pd.isnull(row['repos_description']):
@@ -393,28 +399,6 @@ def preprocess_data(df_column):
     df_column=df_column.apply(lemmatization)
     return df_column
 
-def get_df_from_dropbox():
-    DROPBOX_REFRESH_TOKEN = st.secrets["DROPBOX_REFRESH_TOKEN"]
-    DROPBOX_CLIENT_ID = st.secrets["DROPBOX_CLIENT_ID"]
-    DROPBOX_CLIENT_SECRET =st.secrets["DROPBOX_CLIENT_SECRET"]
-    DROPBOX_FILE_PATH = '/df.joblib'
-
-    try:
-        access_token = get_new_access_token(DROPBOX_REFRESH_TOKEN, DROPBOX_CLIENT_ID, DROPBOX_CLIENT_SECRET)
-        dbx = dropbox.Dropbox(access_token, app_secret=st.secrets["APP_SECRET"], user_agent="Github Recommendation System")
-    except Exception as e:
-        print(f"Error connecting to Dropbox: {e}")
-        return "Error connecting to Dropbox"
-
-    try:
-        _, res = dbx.files_download(DROPBOX_FILE_PATH)
-        file_data = res.content
-    except Exception as e:
-        print(f"Error downloading file from Dropbox: {e}")
-        return "Error downloading file from Dropbox"
-
-    df = joblib.load(BytesIO(file_data))
-    return df
 
 
 
@@ -547,11 +531,8 @@ if menu_id=='HOME':
         image_path ='https://github.com/Shobana1310/GitHub-User-Analytics-and-Recommendation-System/raw/main/images/panda.png'
         st.image(image_path,width=160)
     with col4:
-        st.write(' ')
-        st.write(' ')
-        st.write(' ')
-        image_path ='https://github.com/Shobana1310/GitHub-User-Analytics-and-Recommendation-System/raw/main/images/streamlit_hero.jpg'
-        st.image(image_path,width=160)
+        image_path ='https://github.com/Shobana1310/GitHub-User-Analytics-and-Recommendation-System/raw/main/images/azure%20logo.png'
+        st.image(image_path,width=280)
     
     st.header(':violet[See The Github Recent Events,Click Here 👇]')
 
@@ -667,20 +648,41 @@ if menu_id =='ANALYSIS':
         user_name = st.text_input(label="GitHub Username", placeholder="Enter GitHub Username", label_visibility='hidden')
 
     if user_name:
-        login_names=[]
-        for i in collection.find({},{"_id":0,"user_data":1}):      
-                for j in range(len(i["user_data"])):
-                    login_names.append(i["user_data"][j]["login"])
-        
+        login_names = []
+        user_data_cursor = list(collection.find({}, {"_id": 0, "user_data": 1}))
+        total_documents = len(user_data_cursor)
+
+        progress_bar = st.progress(0)
+        progress_text = st.empty()  # Create an empty container for the progress text
+
+        start_time = time.time()
+
+        for idx, i in enumerate(user_data_cursor):
+            for j in range(len(i["user_data"])):
+                login_names.append(i["user_data"][j]["login"])
+
+            # Update progress bar
+            progress = (idx + 1) / total_documents
+            progress_bar.progress(progress)
+
+            # Calculate ETR and display
+            elapsed_time = time.time() - start_time
+            if progress > 0:  # Avoid division by zero
+                etr = (elapsed_time / progress) * (1 - progress)
+                progress_text.text(f"Progress: {progress:.2%}, Estimated Time Remaining: {etr:.2f} seconds")
+
+            # Simulate delay for demonstration
+            time.sleep(0.1)
+
         if user_name in login_names:
-            with  st.spinner("User name is Already Exist In The Database,Its Updating Now..."):
-               update_user_data(user_name)
-               
+            with st.spinner("User name is Already Exist In The Database, It's Updating Now..."):
+                update_user_data(user_name)
         else:
             with st.spinner("Collecting Your Data..."):
                 get_all_detailsof_user(user_name)
 
-    
+
+    if user_name:
         def get_repo_df():
             data1=[]                                                
             for i in collection.find({"user_data.login": user_name}, {"_id": 0, "repository_data": 1}):
@@ -717,7 +719,7 @@ if menu_id =='ANALYSIS':
         new_user_df['repos_description'] = new_user_df.apply(generate_description_from_readme, axis=1)
         new_user_df= new_user_df.drop_duplicates(subset=['repo_url'])
 
-        
+        @st.cache_data
         def prepare_the_data():
             new_user_df['repos_name'] = preprocess_data(new_user_df['repos_name'])
             new_user_df['repos_description'] = preprocess_data(new_user_df['repos_description'])
@@ -889,17 +891,36 @@ if menu_id =='ANALYSIS':
 
        
 
-        st.subheader(':red[**Mandatory ⚠️  Add Your Data In The Recommendation System,Dont Go Recommendation Without Click Here**]')
+        st.subheader(':red[**Mandatory ⚠️  Add Your Data In The Recommendation System, Don’t Go Recommendation Without Click Here**]')
         if st.button("Click Here", type="primary"):
-            df=get_df_from_dropbox()
-            all_usernames=df['login'].unique()
-            if user_name in all_usernames:
-                with st.spinner("Adding Your Data..."):
-                   exist_data_updation()
-                st.success('Added Successfully ✅')
-            else:
-               with st.spinner("Adding Your Data..."):
-                  new_data_updation()
+            query = text('select * from repositories')
+            df = pd.read_sql_query(query, engine)
+            existing_usernames = df['login'].unique()
+            new_usernames = new_user_df['login'].unique()
+            total_usernames = len(new_usernames)
+            progress_bar = st.progress(0)
+            progress_text = st.empty()
+
+            start_time = time.time()
+
+            for idx, user_name in enumerate(new_usernames):
+                if user_name in existing_usernames:
+                    with st.spinner("Updating Your Data..."):
+                        exist_data_updation(user_name, new_user_df[new_user_df['login'] == user_name])
+                else:
+                    with st.spinner("Adding Your Data..."):
+                        new_data_updation(new_user_df[new_user_df['login'] == user_name])
+
+                progress = (idx + 1) / total_usernames
+                progress_bar.progress(progress)
+
+                elapsed_time = time.time() - start_time
+                if progress > 0:
+                    etr = (elapsed_time / progress) * (1 - progress)
+                    progress_text.text(f"Progress: {progress:.2%}, Estimated Time Remaining: {etr:.2f} seconds")
+
+                time.sleep(0.1)
+
             st.success('Added Successfully ✅')
         
     
@@ -957,43 +978,28 @@ if menu_id=='RECOMMENDATION':
       st.write(' ')
       st.write(' ')
 
-    df=get_df_from_dropbox()
-    
-
-    github_urls = [
-    'https://github.com/Shobana1310/GitHub-User-Analytics-and-Recommendation-System/raw/main/vectorizer/name_vectorizer.joblib',
-    'https://github.com/Shobana1310/GitHub-User-Analytics-and-Recommendation-System/raw/main/vectorizer/langugage_vectorizer.joblib',
-    'https://github.com/Shobana1310/GitHub-User-Analytics-and-Recommendation-System/raw/main/vectorizer/readme_vectorizer.joblib',
-    'https://github.com/Shobana1310/GitHub-User-Analytics-and-Recommendation-System/raw/main/vectorizer/description_vectorizer.joblib']
-
-    loaded_objects = {}
-
-    for url in github_urls:
-        response = requests.get(url)
-        if response.status_code == 200:
-            content = io.BytesIO(response.content)
-            filename = url.split('/')[-1].split('.')[0] 
-            loaded_objects[filename] = joblib.load(content)
-        else:
-            print(f"Failed to fetch data from {url}")
-    
-    name_vectorizer = loaded_objects['name_vectorizer']
-    langugage_vectorizer = loaded_objects['langugage_vectorizer']
-    readme_vectorizer = loaded_objects['readme_vectorizer']
-    description_vectorizer = loaded_objects['description_vectorizer']
+    query=text('select * from repositories')
+    df= pd.read_sql_query(query, engine)
+    def model_setup():
+        name_vectorizer = TfidfVectorizer(stop_words='english')
+        langugage_vectorizer = TfidfVectorizer(stop_words='english')
+        readme_vectorizer = TfidfVectorizer(stop_words='english')
+        description_vectorizer = TfidfVectorizer(stop_words='english')
 
 
-    name_tfidf_matrix = name_vectorizer.fit_transform(df['repos_name'])
-    langugage_tfidf_matrix = langugage_vectorizer.fit_transform(df['languages_list'])
-    description_tfidf_matrix = description_vectorizer.fit_transform(df['repos_description'])
-    readme_tfidf_matrix = readme_vectorizer.fit_transform(df['readme'])
+        name_tfidf_matrix = name_vectorizer.fit_transform(df['repos_name'])
+        langugage_tfidf_matrix = langugage_vectorizer.fit_transform(df['languages_list'])
+        description_tfidf_matrix = description_vectorizer.fit_transform(df['repos_description'])
+        readme_tfidf_matrix = readme_vectorizer.fit_transform(df['readme'])
 
 
-    combined_tfidf_matrix = hstack([name_tfidf_matrix,langugage_tfidf_matrix,description_tfidf_matrix,readme_tfidf_matrix])
-    cosine_sim = cosine_similarity(combined_tfidf_matrix, combined_tfidf_matrix)
+        combined_tfidf_matrix = hstack([name_tfidf_matrix,langugage_tfidf_matrix,description_tfidf_matrix,readme_tfidf_matrix])
+        cosine_sim = cosine_similarity(combined_tfidf_matrix, combined_tfidf_matrix)
 
-    repo_indices = pd.Series(df.index, index=df['repo_url']).drop_duplicates()
-    user_repos = df.groupby('login')['repo_url'].apply(list)
+        repo_indices = pd.Series(df.index, index=df['repo_url']).drop_duplicates()
+        user_repos = df.groupby('login')['repo_url'].apply(list)
+        return cosine_sim,repo_indices,user_repos
+    cosine_sim,repo_indices,user_repos=model_setup()
 
     def get_recommendations_for_user(user_name, cosine_sim=cosine_sim, repo_indices=repo_indices, df=df, user_repos=user_repos):
         if user_name not in user_repos:
@@ -1132,3 +1138,48 @@ if menu_id=='RECOMMENDATION':
                 st.markdown("<br><br>", unsafe_allow_html=True)
 
       
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
