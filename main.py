@@ -12,8 +12,6 @@ from bs4 import BeautifulSoup
 from io import BytesIO
 import pandas as pd
 import datetime
-import os
-from dotenv import load_dotenv
 from pathlib import Path
 import streamlit as st
 import hydralit_components as hc
