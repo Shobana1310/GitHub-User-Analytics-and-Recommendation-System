@@ -14,3 +14,7 @@ plotly==5.22.0
 streamlit-extras==0.4.3
 spacy==3.7.5
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz
+SQLAlchemy==2.0.31
+pyodbc==5.1.0
+urllib3==2.2.2
+pymssql==2.3.0
