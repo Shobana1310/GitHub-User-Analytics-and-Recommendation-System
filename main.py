@@ -12,8 +12,6 @@ from bs4 import BeautifulSoup
 from io import BytesIO
 import pandas as pd
 import datetime
-import os
-from dotenv import load_dotenv
 from pathlib import Path
 import streamlit as st
 import hydralit_components as hc
@@ -31,6 +29,9 @@ from sqlalchemy import create_engine
 from sqlalchemy import text
 from nltk.data import find
 import spacy
+import urllib.parse
+import joblib
+import pyodbc
 import en_core_web_sm
 nlp = en_core_web_sm.load()
 
@@ -46,19 +47,39 @@ def download_nltk_data():
             nltk.download(package, quiet=True)
 
 download_nltk_data()
-load_dotenv()
-api_key =os.getenv("github_api_key_6")
+api_key =st.secrets["github_api_key_6"]
 headers = {"Authorization": f"token {api_key}"}
 
 
-mongo_atlas_user_name =os.getenv("MONGO_ATLAS_USER_NAME")
-mongo_atlas_password = os.getenv("MONGO_ATLAS_PASSWORD")
+mongo_atlas_user_name =st.secrets["MONGO_ATLAS_USER_NAME"]
+mongo_atlas_password = st.secrets["MONGO_ATLAS_PASSWORD"]
 client=pymongo.MongoClient(f"mongodb+srv://{mongo_atlas_user_name}:{mongo_atlas_password}@cluster0.ehfepgy.mongodb.net/?retryWrites=true&w=majority")
 db = client["github"]
 collection=db["github_user_details"] 
 
-mysql_password = os.getenv("MYSQL_PASSWORD") 
-engine=create_engine(f"mysql+pymysql://root:{mysql_password}@localhost:3306/github")
+server = st.secrets["SERVER"]
+database = st.secrets["DATABASE"]
+username = st.secrets["USERNAME"]
+password =st.secrets["AZURE_PASSWORD"]
+driver = 'ODBC Driver 17 for SQL Server'
+
+params = urllib.parse.quote_plus(f"""
+Driver={driver};
+Server=tcp:{server},1433;
+Database={database};
+Uid={username};
+Pwd={password};
+Encrypt=yes;
+TrustServerCertificate=no;
+Connection Timeout=30;
+""")
+
+conn_str = f'mssql+pyodbc:///?autocommit=true&odbc_connect={params}'
+
+engine = create_engine(conn_str, echo=True)
+
+# mysql_password = os.getenv("MYSQL_PASSWORD") 
+# engine=create_engine(f"mysql+pymysql://root:{mysql_password}@localhost:3306/github")
 
 def get_user_details(user_name):
     user_url = f'https://api.github.com/users/{user_name}'
@@ -275,7 +296,32 @@ def update_user_data(user_name):
         print(f"Failed to process user {user_name}. Error: {e}")
 
 
+def create_and_insert_data(engine, table_name, create_table_query,file_path):
+    try:
+        create_table_query = text("""
+                              CREATE TABLE IF NOT EXISTS repositories (
+                                   login VARCHAR(255),
+                                   repos_name VARCHAR(255),
+                                   repo_url varchar(255) PRIMARY KEY,
+                                   languages_list TEXT,
+                                   repos_description TEXT,
+                                   readme MEDIUMTEXT,
+                                   primary_language VARCHAR(255))""")
+        with engine.connect() as conn:
+            conn.execute(create_table_query)
 
+        df = joblib.load(file_path)
+
+        df.to_sql(table_name, con=engine, if_exists='append', index=False)
+
+        print(f"Data inserted into '{table_name}' successfully!")
+
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+
+file_path = 'https://github.com/Shobana1310/GitHub-User-Analytics-and-Recommendation-System/raw/main/vectorizer/df.joblib'
+
+create_and_insert_data(engine, 'repositories', file_path)
 
 def new_data_updation(new_user_df):
     try:
@@ -1089,5 +1135,48 @@ if menu_id=='RECOMMENDATION':
                 st.markdown("<br><br>", unsafe_allow_html=True)
 
       
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
