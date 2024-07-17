@@ -296,17 +296,8 @@ def update_user_data(user_name):
         print(f"Failed to process user {user_name}. Error: {e}")
 
 
-def create_and_insert_data(engine, table_name, create_table_query,file_path):
+def create_and_insert_data(engine, table_name, create_table_query, file_path):
     try:
-        create_table_query = text("""
-                              CREATE TABLE IF NOT EXISTS repositories (
-                                   login VARCHAR(255),
-                                   repos_name VARCHAR(255),
-                                   repo_url varchar(255) PRIMARY KEY,
-                                   languages_list TEXT,
-                                   repos_description TEXT,
-                                   readme MEDIUMTEXT,
-                                   primary_language VARCHAR(255))""")
         with engine.connect() as conn:
             conn.execute(create_table_query)
 
@@ -321,7 +312,21 @@ def create_and_insert_data(engine, table_name, create_table_query,file_path):
 
 file_path = 'https://github.com/Shobana1310/GitHub-User-Analytics-and-Recommendation-System/raw/main/vectorizer/df.joblib'
 
-create_and_insert_data(engine, 'repositories', file_path)
+# Example create_table_query
+create_table_query = """
+    CREATE TABLE IF NOT EXISTS repositories (
+        login VARCHAR(255),
+        repos_name VARCHAR(255),
+        repo_url varchar(255) PRIMARY KEY,
+        languages_list TEXT,
+        repos_description TEXT,
+        readme MEDIUMTEXT,
+        primary_language VARCHAR(255)
+    )
+"""
+
+# Call the function with all required arguments
+create_and_insert_data(engine, 'repositories', create_table_query, file_path)
 
 def new_data_updation(new_user_df):
     try:
