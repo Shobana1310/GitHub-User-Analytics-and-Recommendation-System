@@ -3,3 +3,5 @@ primaryColor="#157d1d"
 backgroundColor="#000000"
 secondaryBackgroundColor="#81816b"
 textColor="#f5eeee"
+[server]
+address = "0.0.0.0"
